@@ -1,37 +1,19 @@
----
-- name: "Sécuriser SSH et installer bind"
+- name: "Créer l'user toto sur srv-ansible"
+  hosts: localhost
+  connection: local
+  become: true
+  tasks:
+    - name: "Création de l'user toto avec mot de passe et clefs SSH"
+      ansible.builtin.user:
+        name: toto
+        password: "{{ '@Partage123' | password_hash('sha512') }}"
+        update_password: on_create
+        generate_ssh_key: true
+        ssh_key_type: ed25519
+
+- name: "Configurer les serveurs"
   hosts: all
   become: true
-  vars:
-    srvansible_ip: 10.71.200.32
-
-  tasks:
-    - name: "Limiter SSH à ansible depuis srv-ansible"
-      ansible.builtin.blockinfile:
-        path: /etc/ssh/sshd_config
-        block: |
-          AllowUsers ansible@{{ srvansible_ip }}
-        validate: "/usr/sbin/sshd -t -f %s"
-# Verification du fichier et de sa syntaxe, si le validate passe pas, le fichier n'est pas modifié
-# %s c'est pour le fichier temporaire (celui de la config ssh)
-
-    - name: "Neutraliser le mot de passe de ansible"
-      ansible.builtin.user:
-        name: ansible
-        password_lock: true
-
-    - name: "Installer bind"
-      ansible.builtin.dnf:
-        name: bind
-        state: present
-
-    - name: "Démarrer named (le service de bind)"
-      ansible.builtin.service:
-        name: named
-        state: started
-        enabled: true
-
-    - name: "Restart sshd"
-      ansible.builtin.service:
-        name: sshd
-        state: restarted
+  roles:
+    - secure_ssh_bind
+    - admin_user

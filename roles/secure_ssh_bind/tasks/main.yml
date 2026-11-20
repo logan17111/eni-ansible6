@@ -1,0 +1,77 @@
+---
+#TP 6, premier playbook
+- name: "Limiter SSH à ansible depuis srv-ansible"
+  ansible.builtin.blockinfile:
+    path: /etc/ssh/sshd_config
+    block: |
+      AllowUsers ansible@{{ srvansible_ip }} toto@{{ srvansible_ip }}
+    validate: "/usr/sbin/sshd -t -f %s"
+# Verification du fichier et de sa syntaxe, si le validate passe pas, le fichier n'est pas modifié
+# %s c'est pour le fichier temporaire (celui de la config ssh)
+
+- name: "Neutraliser le mot de passe de ansible"
+  ansible.builtin.user:
+    name: ansible
+    password_lock: true
+
+- name: "Installer bind"
+  ansible.builtin.dnf:
+    name: bind
+    state: present
+# TP 7 ajout de la conf bind avec un fichier jinja
+
+- name: "Récupérer le DNS de l'hôte"
+  ansible.builtin.set_fact:
+    forwarder_dns: "{{ ansible_facts['dns']['nameservers'][0] }}" # Les crochets pour cible les clé du dictionnaire json et le 0 pour la premiere valeur de la liste nameservers
+
+- name: "Configurer bind avec contrôle et rollback"
+  block:
+    - name: "Sauvegarde de la config actuelle"
+      ansible.builtin.copy:
+        src: /etc/named.conf
+        dest: /etc/named.conf.bak
+        remote_src: true
+
+    - name: "Copie de la nouvelle config"
+      ansible.builtin.template:
+        src: named.conf.j2
+        dest: /etc/named.conf
+        owner: root
+        group: named
+        mode: "0640"
+
+    - name: "Check de la syntaxe du fichier"
+      ansible.builtin.command: named-checkconf /etc/named.conf
+      changed_when: false # avec command il faut ajouter ça pour avoir le OK a la fin
+
+    - name: "Redémarrer named"
+      ansible.builtin.service:
+        name: named
+        state: restarted
+
+  rescue: # si une tasks du block est en erreur, alors on passe à ce rescue
+    - name: "Rollback vers l'ancienne config"
+      ansible.builtin.copy:
+        src: /etc/named.conf.bak
+        dest: /etc/named.conf
+        remote_src: true # Pour pas lancer cette commande depuis le /etc local
+
+    - name: "Redémarrer named avec l'ancienne config"
+      ansible.builtin.service:
+        name: named
+        state: restarted
+
+    - name: "Arrêter le playbook en erreur"
+      ansible.builtin.fail:
+        msg: "Config bind en erreur, rollback effectué"
+
+- name: "Démarrer named (le service de bind)"
+  ansible.builtin.service:
+    name: named
+    state: started
+    enabled: true
+
+- name: "Restart sshd"
+  ansible.builtin.service:
+    name: sshd
+    state: restarted

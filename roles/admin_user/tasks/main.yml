@@ -1,0 +1,31 @@
+---
+- name: "Charger les variables de l'utilisateur"
+  ansible.builtin.include_vars:
+    file: main.yml
+
+- name: "Vérifier que les variables existent"
+  ansible.builtin.assert:
+    that:
+      - admin_name is defined
+      - admin_hash is defined
+      - admin_pubkey is defined
+    fail_msg: "la variable de l'user admin est manquante"
+
+- name: "Création l'utilisateur"
+  ansible.builtin.user:
+    name: "{{ admin_name }}"
+    password: "{{ admin_hash }}"
+
+- name: "Sudo avec mot de passe"
+  ansible.builtin.lineinfile:
+    path: "/etc/sudoers.d/{{ admin_name }}"
+    line: "{{ admin_name }} ALL=(ALL) ALL"
+    create: true
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: "Pousser la clef publique"
+  ansible.posix.authorized_key:
+    user: "{{ admin_name }}"
+    key: "{{ admin_pubkey }}"
+    state: present

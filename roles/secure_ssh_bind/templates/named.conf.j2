@@ -1,0 +1,27 @@
+options {
+        directory "/var/named";
+
+        // Redirecteur : le DNS configuré sur l'hôte cible
+        forwarders {
+                {{ forwarder_dns }};
+        };
+
+        // Redirection unique : on ne résout jamais soi-même
+        forward only;
+
+        recursion yes;
+
+        // DNSSEC désactivé
+        dnssec-validation no;
+
+        listen-on { any; };
+        listen-on-v6 { any; };
+        allow-query { any; };
+};
+
+zone "." IN {
+        type hint;
+        file "named.ca";
+};
+
+include "/etc/named.rfc1912.zones";
